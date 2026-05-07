@@ -1,165 +1,213 @@
+// controllers/usuarios.controller.js
+const jwt = require('jsonwebtoken');
 const usuarioModel = require('../models/usuario.model');
 
-// POST /api/usuarios
 const create = async (req, res) => {
-  try {
-    const { nombre, correo, contrasena } = req.body;
-    
-    // Validación de campos requeridos
-    if (!nombre || !correo || !contrasena) {
-      return res.status(400).json({ 
-        ok: false, 
-        msg: 'nombre, correo y contraseña son requeridos' 
-      });
+    try {
+        const { nombre, correo, contrasena } = req.body;
+        
+        // Validaciones...
+        if (!nombre || !correo || !contrasena) {
+            return res.status(400).json({ 
+                ok: false, 
+                msg: 'nombre, correo y contraseña son requeridos' 
+            });
+        }
+        
+        // Usar el método create() de tu modelo
+        const nuevoUsuario = await usuarioModel.create({ nombre, correo, contrasena });
+        
+        const token = jwt.sign(
+            { id: nuevoUsuario.id, correo: nuevoUsuario.correo },
+            process.env.JWT_SECRET,
+            { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
+        );
+        
+        res.status(201).json({ 
+            ok: true, 
+            token,
+            usuario: {
+                id: nuevoUsuario.id,
+                nombre: nuevoUsuario.nombre,
+                correo: nuevoUsuario.correo
+            }
+        });
+        
+    } catch (err) {
+        if (err.message === 'EMAIL_ALREADY_EXISTS') {
+            return res.status(409).json({ ok: false, msg: 'El correo ya está registrado' });
+        }
+        console.error(err);
+        res.status(500).json({ ok: false, msg: err.message });
     }
-    
-    // Validación de longitud mínima para nombre (ejemplo: mínimo 3 caracteres)
-    if (nombre.length < 3) {
-      return res.status(400).json({ 
-        ok: false, 
-        msg: 'El nombre debe tener al menos 3 caracteres' 
-      });
-    }
-    
-    // Validación de longitud máxima opcional para nombre
-    if (nombre.length > 50) {
-      return res.status(400).json({ 
-        ok: false, 
-        msg: 'El nombre no puede exceder los 50 caracteres' 
-      });
-    }
-    
-    // Validación de formato de correo electrónico usando expresión regular
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(correo)) {
-      return res.status(400).json({ 
-        ok: false, 
-        msg: 'Formato de correo electrónico inválido' 
-      });
-    }
-    
-    // Validación de longitud mínima para contraseña (ejemplo: mínimo 6 caracteres)
-    if (contrasena.length < 6) {
-      return res.status(400).json({ 
-        ok: false, 
-        msg: 'La contraseña debe tener al menos 6 caracteres' 
-      });
-    }
-    
-    // Validación opcional: contraseña con requisitos adicionales
-    // Al menos una mayúscula, una minúscula y un número
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/;
-    if (!passwordRegex.test(contrasena)) {
-      return res.status(400).json({ 
-        ok: false, 
-        msg: 'La contraseña debe contener al menos una mayúscula, una minúscula y un número' 
-      });
-    }
-    
-    const data = await usuarioModel.create({ nombre, correo, contrasena });
-    res.status(201).json({ ok: true, data });
-    
-  } catch (err) {
-    res.status(500).json({ ok: false, msg: err.message });
-  }
 };
 
 const login = async (req, res) => {
-  try {
-    const { correo, contrasena } = req.body;
-    
-    // Validaciones básicas
-    if (!correo || !contrasena) {
-      return res.status(400).json({ 
-        ok: false, 
-        msg: 'correo y contraseña requeridos' 
-      });
+    try {
+        const { correo, contrasena } = req.body;
+        
+        if (!correo || !contrasena) {
+            return res.status(400).json({ 
+                ok: false, 
+                msg: 'Correo y contraseña son requeridos' 
+            });
+        }
+        
+        //  Usar el método login() de tu modelo (NO findByCorreo)
+        const usuario = await usuarioModel.login({ correo, contrasena });
+        
+        const token = jwt.sign(
+            { id: usuario.id, correo: usuario.correo },
+            process.env.JWT_SECRET,
+            { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
+        );
+        
+        res.json({ 
+            ok: true,
+            token, 
+            usuario: {
+                id: usuario.id,
+                nombre: usuario.nombre,
+                correo: usuario.correo
+            }
+        });
+        
+    } catch (err) {
+        console.error(err);
+        
+        if (err.message === 'Usuario no encontrado' || err.message === 'Contraseña incorrecta') {
+            return res.status(401).json({ ok: false, msg: 'Credenciales inválidas' });
+        }
+        
+        res.status(500).json({ ok: false, msg: err.message });
     }
-    
-    // Validar formato de correo
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(correo)) {
-      return res.status(400).json({ 
-        ok: false, 
-        msg: 'Formato de correo electrónico inválido' 
-      });
+};
+
+const getPerfil = async (req, res) => {
+    try {
+        // El ID viene del token (middleware)
+        const usuario_id = req.usuario.id;
+        const usuario = await usuarioModel.getById(usuario_id);
+        
+        if (!usuario) {
+            return res.status(404).json({ ok: false, msg: 'Usuario no encontrado' });
+        }
+        
+        // No enviar la contraseña por seguridad
+        delete usuario.contrasena;
+        
+        res.json({ ok: true, data: usuario });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ ok: false, msg: err.message });
     }
-    
-    // Llamar al modelo
-    const data = await usuarioModel.login({ correo, contrasena });
-    
-    // 200 OK en lugar de 201 Created
-    res.status(200).json({ ok: true, data });
-    
-  } catch (err) {
-    // Manejo específico de errores de autenticación
-    let statusCode = 500;
-    let message = err.message;
-    
-    if (err.message === 'Usuario no encontrado' || 
-        err.message === 'Contraseña incorrecta') {
-      statusCode = 401; // Unauthorized
-      message = 'Credenciales inválidas';
-    }
-    
-    res.status(statusCode).json({ ok: false, msg: message });
-  }
 };
 
 const getById = async (req, res) => {
-  try {
-    const data = await usuarioModel.getById(req.params.id);
-    if (!data) return res.status(404)
-      .json({ ok: false, msg: 'usuario no encontrado' });
-    res.json({ ok: true, data });
-  } catch (err) {
-    res.status(500).json({ ok: false, msg: err.message });
-  }
-}
+    try {
+        //  Usar getById() de tu modelo
+        const usuario = await usuarioModel.getById(req.params.id);
+        
+        if (!usuario) {
+            return res.status(404).json({ ok: false, msg: 'Usuario no encontrado' });
+        }
+        
+        res.json({ ok: true, data: usuario });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ ok: false, msg: err.message });
+    }
+};
 
-// PUT /api/act_perfil/:id
 const update = async (req, res) => {
-  try {
-    const affected = await usuarioModel.update(req.params.id, req.body);
-    if (!affected) return res.status(404)
-      .json({ ok: false, msg: 'Registro no encontrado' });
-    const data = await usuarioModel.getById(req.params.id);
-    res.json({ ok: true, data });
-  } catch (err) {
-    res.status(500).json({ ok: false, msg: err.message });
-  }
+    try {
+        
+        const usuario_id = req.usuario.id;
+        const { nombre, correo } = req.body;
+        
+        if (!nombre && !correo) {
+            return res.status(400).json({ 
+                ok: false, 
+                msg: 'Al menos nombre o correo son requeridos' 
+            });
+        }
+        
+        //  Usar update() de tu modelo con el ID del token
+        const affected = await usuarioModel.update(usuario_id, { nombre, correo });
+        
+        if (affected === 0) {
+            return res.status(404).json({ ok: false, msg: 'Usuario no encontrado' });
+        }
+        
+        const usuarioActualizado = await usuarioModel.getById(usuario_id);
+        delete usuarioActualizado.contrasena;
+        
+        res.json({ 
+            ok: true, 
+            msg: 'Perfil actualizado correctamente',
+            data: usuarioActualizado
+        });
+        
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ ok: false, msg: err.message });
+    }
 };
 
 const updatePassword = async (req, res) => {
-  try {
-    const { contrasena } = req.body;
-    if (!contrasena) 
-      return res.status(400).json({ ok: false, msg: 'Contraseña requerida' });
-    
-    const affected = await usuarioModel.updatePassword(req.params.id, { contrasena });
-    if (!affected) return res.status(404)
-      .json({ ok: false, msg: 'Usuario no encontrado' });
-    
-    res.json({ ok: true, msg: 'Contraseña actualizada correctamente' });
-  } catch (err) {
-    res.status(500).json({ ok: false, msg: err.message });
-  }
+    try {
+        
+        const usuario_id = req.usuario.id;
+        const { contrasena_actual, contrasena_nueva } = req.body;
+        
+        if (!contrasena_actual || !contrasena_nueva) {
+            return res.status(400).json({ 
+                ok: false, 
+                msg: 'Contraseña actual y nueva son requeridas' 
+            });
+        }
+        
+        // Verificar la contraseña actual
+        const passwordValida = await usuarioModel.verificarPassword(usuario_id, contrasena_actual);
+        
+        if (!passwordValida) {
+            return res.status(401).json({ ok: false, msg: 'Contraseña actual incorrecta' });
+        }
+        
+        //  Usar updatePassword() de tu modelo
+        const affected = await usuarioModel.updatePassword(usuario_id, contrasena_nueva);
+        
+        if (affected === 0) {
+            return res.status(404).json({ ok: false, msg: 'Usuario no encontrado' });
+        }
+        
+        res.json({ ok: true, msg: 'Contraseña actualizada correctamente' });
+        
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ ok: false, msg: err.message });
+    }
 };
 
-// DELETE /api/usuarios/:id
+
 const remove = async (req, res) => {
-  try {
-    const affected = await usuarioModel.remove(req.params.id);
-    if (!affected) return res.status(404)
-      .json({ ok: false, msg: 'Usuario no encontrado' }); // Corregido: Producto → Usuario
-    res.json({ ok: true, msg: 'Usuario eliminado' }); // Corregido: Producto → Usuario
-  } catch (err) {
-    res.status(500).json({ ok: false, msg: err.message });
-  }
+    try {
+        //  El ID viene del token
+        const usuario_id = req.usuario.id;
+        
+        //  Usar remove() de tu modelo
+        const affected = await usuarioModel.remove(usuario_id);
+        
+        if (affected === 0) {
+            return res.status(404).json({ ok: false, msg: 'Usuario no encontrado' });
+        }
+        
+        res.json({ ok: true, msg: 'Usuario eliminado correctamente' });
+        
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ ok: false, msg: err.message });
+    }
 };
 
-
-
-
-
-module.exports = {create, login, getById,update, updatePassword, remove}
+module.exports = { create, login, getById, update, updatePassword, remove, getPerfil };
