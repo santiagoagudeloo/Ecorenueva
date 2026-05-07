@@ -27,4 +27,14 @@ app.use('/contacto', contactoRouter);
 const canjeRouter = require('./routes/canje.routes');
 app.use('/canjear-simple', canjeRouter);  
 
+// ─── Middleware de errores global ───
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: 'Error interno del servidor' });
+});
+
+app.listen(process.env.PORT, () => {
+  console.log(`Servidor en puerto ${process.env.PORT}`);
+});
+
 module.exports = app;
