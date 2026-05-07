@@ -1,13 +1,15 @@
+const jwt = require('jsonwebtoken'); 
 const canjeModel = require('../models/canje.model');
 
 const canjearSimple = async (req, res) => {
-  // 1. Obtener datos del body de la petición
-  const { usuario_id, producto_id } = req.body;
+  // ✅ Obtener usuario_id del token (del middleware verificarToken)
+  const usuario_id = req.usuario.id;
+  const { producto_id } = req.body;
   
-  // Validar que los datos llegaron
-  if (!usuario_id || !producto_id) {
+  // Validar que llegó producto_id
+  if (!producto_id) {
     return res.status(400).json({ 
-      error: 'usuario_id y producto_id son requeridos' 
+      error: 'producto_id es requerido' 
     });
   }
   
@@ -26,7 +28,9 @@ const canjearSimple = async (req, res) => {
     // 4. Verificar puntos suficientes
     if (usuario.puntos < producto.puntos_requeridos) {
       return res.status(400).json({ 
-        error: 'Puntos insuficientes' 
+        error: 'Puntos insuficientes',
+        puntos_actuales: usuario.puntos,
+        puntos_necesarios: producto.puntos_requeridos
       });
     }
     
