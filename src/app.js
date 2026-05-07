@@ -1,8 +1,18 @@
 const express = require('express');
 const app = express();
 
+// Middlewares de terceros
+app.use(require('cors')());           // CORS
+app.use(require('morgan')('dev'));   // Logging
+
 // Middleware para parsear JSON
 app.use(express.json());
+
+// Middleware personalizado global
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next(); // Pasar al siguiente middleware
+});
 
 // Rutas
 const usuarioRouter = require('./routes/usuario.routes');
